@@ -270,6 +270,8 @@ impl Translator {
 
 #[cfg(test)]
 mod tests {
+    use rand::RngExt;
+
     use super::*;
 
     const BOILER_LUA: &str = r#"
@@ -410,5 +412,165 @@ mod tests {
             !out.contains_key("min_with_nil"),
             "min_with_nil should have been omitted due to nil propagation"
         );
+    }
+
+    #[test]
+    fn test_real_translation() {
+        const MATH_TEST_LUA: &str = r#"
+            return function(p)
+                return {
+                    degrees_f32_set_water_temp = p.p_367 * math.abs(p.p_363 - 1) + p.p_3 * p.p_363,
+
+                    degrees_f32_room_temp = p.p_9,
+                    degrees_f32_desired_temp = p.p_10,
+
+                    degrees_f32_outside_temp = p.p_76 / 10,
+                    degrees_f32_supply_temp = p.p_82 / 10,
+                    degrees_f32_return_temp = p.p_81 / 10,
+                    lmin_f32_water_flow = p.p_90 / 10,
+
+                    degrees_f32_heating_start_ambient_temp = p.p_280,
+
+                    onoff_f32_power_on = p.p_775,
+                    enum_f32_heating_mode = p.p_774,
+
+                    hz_f32_compressor_frequency = p.p_66,
+                    hz_f32_fan_frequency = p.p_67 / 60,
+
+
+                    onoff_f32_sensor_enable_boiler = p.p_306,
+                    onoff_f32_linkage_switch_setting = p.p_263,
+                    lmin_f32_flow_value_during_e03 = p.p_392,
+                    degrees_f32_temp_difference_for_e37 = p.p_281,
+
+                    degrees_f32_manual_set_temp_heating = p.p_771,
+                    degrees_f32_manual_set_temp_cooling = p.p_770,
+
+                    enum_f32_heating_curve_heating_select = p.p_790,
+                    enum_f32_heating_curve_cooling_select = p.p_789,
+
+                    degrees_f32_max_outside_temp_heating = p.p_364,
+                    degrees_f32_min_outside_temp_cooling = p.p_363,
+
+                    degrees_f32_max_water_temp_heating = p.p_368,
+                    degrees_f32_min_water_temp_heating = p.p_369,
+
+                    degrees_f32_min_water_temp_cooling = p.p_371,
+                    degrees_f32_max_water_temp_cooling = p.p_372,
+
+                    onoff_f32_custom_heating_curve_heating = p.p_2066,
+                    slope_f32_custom_heating_curve_heating_slope = p.p_2067,
+                    degrees_f32_custom_heating_curve_heating_start = p.p_2068,
+
+                    onoff_f32_custom_heating_curve_cooling = p.p_2095,
+                    slope_f32_custom_heating_curve_cooling_slope = p.p_2096,
+                    degrees_f32_custom_heating_curve_cooling_start = p.p_2097,
+
+                    degrees_f32_hysteresis_a = p.p_284,
+
+                    enum_f32_circulation_pump_mode = p.p_286,
+                    onoff_f32_flow_switch = p.p_261,
+
+                    percentage_f32_circulation_pump_max_speed = p.p_518,
+                    percentage_f32_circulation_pump_min_speed = p.p_358,
+                    percentage_f32_circulation_pump_min_speed_regulation = p.p_421,
+                    percentage_f32_circulation_pump_speed_at_set_temp = p.p_519,
+
+                    degrees_f32_temp_difference_for_circulation_pump_activation = p.p_357,
+
+                    onoff_f32_heatpump_control_based_on_inlet = p.p_374,
+
+                    onoff_f32_anti_block_circulation_on = p.p_2112,
+                    days_f32_anti_block_circulation_interval = p.p_2113,
+
+                    enum_f32_defrosting_mode = p.p_288,
+
+                    rpm_f32_max_fan_frequency_heating = p.p_326,
+                    rpm_f32_max_fan_frequency_cooling = p.p_328,
+                    rpm_f32_max_fan_frequency_silent = p.p_347,
+
+                    slope_f32_night_curve_slope = p.p_2076,
+                    degrees_f32_night_curve_start = p.p_2077,
+                    degrees_f32_night_curve_start_time = p.p_2078,
+                    degrees_f32_night_curve_end_time = p.p_2079,
+
+                    x_f32_current_unit_tool_number = p.p_38,
+                    x_f32_eev_open_step = p.p_68,
+                    x_f32_evi_valve_open_step = p.p_69,
+
+                    volt_f32_ac_input_voltage = p.p_70,
+
+                    amp_f32_ac_input_current = p.p_71 / 10,
+                    amp_f32_compressor_phase_current = p.p_72 / 10,
+
+                    degrees_f32_compressor_ipm_temp = p.p_73,
+                    degrees_f32_high_pressure_saturation_temp = p.p_74,
+                    degrees_f32_low_pressure_saturation_temp = p.p_75,
+
+                    degrees_f32_outer_coil_temp = p.p_77,
+                    degrees_f32_coil_temp = p.p_78,
+                    degrees_f32_suction_temp = p.p_79,
+                    degrees_f32_exhaust_temp = p.p_80,
+
+                    degrees_f32_economizer_inlet_temp = p.p_83,
+                    degrees_f32_economizer_outlet_temp = p.p_84,
+
+                    degrees_f32_plate_heat_exchanger_exhaust_temp = p.p_87,
+
+                    x_f32_water_pump_speed_pwm = p.p_89,
+
+                    volt_f32_unit_input_voltage = p.p_92,
+
+                    amp_f32_unit_input_current = p.p_93 / 10,
+                    kw_f32_unit_input_power = p.p_94 / 10,
+
+                    kwh_f32_unit_input_power_consumption = p.p_95,
+
+                    x_f32_smart_grid_status = p.p_124,
+                    x_f32_number = p.p_226,
+
+                    kwh_f32_power_consumption_6_min = p.p_227,
+                    x_f32_cooling_capacity_6_min = p.p_228,
+                    x_f32_eer_6_min = p.p_229,
+                    x_f32_current_eer = p.p_230,
+
+                    x_f32_heating_capacity_6_min = p.p_235,
+                    x_f32_cop_6_min = p.p_236,
+                    x_f32_current_cop = p.p_237,
+
+                    degrees_f32_set_dhw_temp = p.p_772 / 10,
+
+                    kwh_f32_program_version = p.p_866,
+
+                    onoff_f32_sterilization = p.p_2051,
+                    days_f32_sterilization_interval = p.p_2052,
+                    time_f32_sterilization_start_time = p.p_2053,
+                    minutes_f32_sterilization_run_time = p.p_2054,
+                    degrees_f32_sterilization_temp = p.p_2055 / 10,
+
+                    degrees_f32_dhw_tank_temp = p.p_86 / 10,
+
+                    x_f32_water_pump_pwm_range_setting = p.p_404,
+                }
+            end
+        "#;
+        // Initialize the translator with our test script
+        let mut rng = rand::rng();
+
+        for _ in 0..10_0 {
+            let mut p: HashMap<String, Option<f32>> = HashMap::with_capacity(10_001);
+            let t = Translator::from_scripts([("real", MATH_TEST_LUA)]).unwrap();
+            for i in 0..=10_000 {
+                let value = if rng.random_bool(0.1) {
+                    None // 10% missing
+                } else {
+                    Some(rng.random_range(0.0..1000.0))
+                };
+
+                p.insert(format!("p_{i}"), value);
+            }
+
+            let out: HashMap<String, f32> = t.translate("real", &p).unwrap();
+        }
     }
 }
