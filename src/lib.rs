@@ -114,25 +114,36 @@ impl mlua::UserData for Value {
             Ok(Value(va.0.map(|x| -x)))
         });
 
-        methods.add_meta_method(
+        methods.add_meta_function(
             mlua::MetaMethod::Lt,
-            |_, this: &Value, other: Value| match (this.0, other.0) {
-                (Some(a), Some(b)) => Ok(a < b),
-                _ => Ok(false),
+            |lua, (a, b): (mlua::Value, mlua::Value)| {
+                let va = Value::from_lua(a, lua)?;
+                let vb = Value::from_lua(b, lua)?;
+                match (va.0, vb.0) {
+                    (Some(x), Some(y)) => Ok(x < y),
+                    _ => Ok(false),
+                }
             },
         );
-
-        methods.add_meta_method(
+        methods.add_meta_function(
             mlua::MetaMethod::Le,
-            |_, this: &Value, other: Value| match (this.0, other.0) {
-                (Some(a), Some(b)) => Ok(a <= b),
-                _ => Ok(false),
+            |lua, (a, b): (mlua::Value, mlua::Value)| {
+                let va = Value::from_lua(a, lua)?;
+                let vb = Value::from_lua(b, lua)?;
+                match (va.0, vb.0) {
+                    (Some(x), Some(y)) => Ok(x <= y),
+                    _ => Ok(false),
+                }
             },
         );
-
-        methods.add_meta_method(mlua::MetaMethod::Eq, |_, this: &Value, other: Value| {
-            Ok(this.0 == other.0)
-        });
+        methods.add_meta_function(
+            mlua::MetaMethod::Eq,
+            |lua, (a, b): (mlua::Value, mlua::Value)| {
+                let va = Value::from_lua(a, lua)?;
+                let vb = Value::from_lua(b, lua)?;
+                Ok(va.0 == vb.0)
+            },
+        );
     }
 }
 
