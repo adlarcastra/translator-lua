@@ -113,6 +113,26 @@ impl mlua::UserData for Value {
             let va = Value::from_lua(a, lua)?;
             Ok(Value(va.0.map(|x| -x)))
         });
+
+        methods.add_meta_method(
+            mlua::MetaMethod::Lt,
+            |_, this: &Value, other: Value| match (this.0, other.0) {
+                (Some(a), Some(b)) => Ok(a < b),
+                _ => Ok(false),
+            },
+        );
+
+        methods.add_meta_method(
+            mlua::MetaMethod::Le,
+            |_, this: &Value, other: Value| match (this.0, other.0) {
+                (Some(a), Some(b)) => Ok(a <= b),
+                _ => Ok(false),
+            },
+        );
+
+        methods.add_meta_method(mlua::MetaMethod::Eq, |_, this: &Value, other: Value| {
+            Ok(this.0 == other.0)
+        });
     }
 }
 
