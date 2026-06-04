@@ -144,6 +144,10 @@ impl mlua::UserData for Value {
                 Ok(va.0 == vb.0)
             },
         );
+
+        methods.add_method("unwrap_or", |_, this, fallback: f32| {
+            Ok(Value(Some(this.0.unwrap_or(fallback))))
+        });
     }
 }
 
@@ -358,7 +362,35 @@ mod tests {
 
         let out: HashMap<String, Option<f32>> = t.translate("boiler", &raw).unwrap();
 
-        assert!(out.contains_key("degrees_f32_heating_start_ambient_temp"));
+        assert_eq!(
+            out.get("degrees_f32_heating_start_ambient_temp"),
+            Some(&None)
+        );
+    }
+
+    #[test]
+    fn test_unwrap_or_method() {
+        const UNWRAP_LUA: &str = r#"
+        return function(p)
+            return {
+                -- p.missing_value doesn't exist, should fall back to 15.0
+                fallback_worked = p.missing_value:unwrap_or(15.0),
+                -- p.existing_value exists, should keep its value (42.0)
+                fallback_ignored = p.existing_value:unwrap_or(15.0),
+            }
+        end
+    "#;
+
+        let t = Translator::from_scripts([("unwrap_test", UNWRAP_LUA)]).unwrap();
+
+        let mut raw: HashMap<String, f32> = HashMap::new();
+        raw.insert("existing_value".to_owned(), 42.0);
+
+        let out: HashMap<String, f32> = t.translate("unwrap_test", &raw).unwrap();
+
+        // Verify the unwrap_or method executed properly inside Lua
+        assert!((out["fallback_worked"] - 15.0).abs() < 1e-5);
+        assert!((out["fallback_ignored"] - 42.0).abs() < 1e-5);
     }
 
     #[test]
@@ -565,21 +597,27 @@ mod tests {
                 }
             end
         "#;
-        // Initialize the translator with our test script
         let mut rng = rand::rng();
+        let t = Translator::from_scripts([("real", REAL_LUA)]).unwrap();
+
+        let mut p: HashMap<String, Option<f32>> =
+            (0..=10_000).map(|i| (format!("p_{i}"), None)).collect();
+
+        let keys: Vec<String> = p.keys().cloned().collect();
 
         for _ in 0..1000 {
-            let mut p: HashMap<String, Option<f32>> = HashMap::with_capacity(10_001);
-            let t = Translator::from_scripts([("real", REAL_LUA)]).unwrap();
-            for i in 0..=10_000 {
+            for key in &keys {
                 let value = if rng.random_bool(0.1) {
-                    None // 10% missing
+                    None
                 } else {
                     Some(rng.random_range(0.0..1000.0))
                 };
 
-                p.insert(format!("p_{i}"), value);
+                if let Some(val_ref) = p.get_mut(key) {
+                    *val_ref = value;
+                }
             }
+
             let _: HashMap<String, f32> = t.translate("real", &p).unwrap();
         }
     }
