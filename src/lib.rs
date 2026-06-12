@@ -1,5 +1,8 @@
-use mlua::{FromLua, Function, Lua, RegistryKey, Table};
-use std::collections::HashMap;
+use mlua::{FromLua, Function, Lua, RegistryKey, Table, Variadic};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Debug)]
 pub enum TranslateError {
@@ -220,6 +223,87 @@ impl Translator {
         }
 
         Ok(Self { lua, functions })
+    }
+
+    pub fn translate_direct(
+        &self,
+        lua_code: &str,
+        data: &HashMap<String, Option<f32>>,
+    ) -> mlua::Result<(HashMap<String, Option<f32>>, String)> {
+        let lua = Lua::new();
+
+        // --- 1. Set up standard print/write capturing ---
+        let stdout = Arc::new(Mutex::new(String::new()));
+        let stdout_clone = stdout.clone();
+
+        let print_fn = lua.create_function(move |lua, args: Variadic<mlua::Value>| {
+            let mut out = String::new();
+            for (i, v) in args.iter().cloned().enumerate() {
+                if i > 0 {
+                    out.push('\t');
+                }
+                let value_wrapper = Value::from_lua(v, lua)?;
+                out.push_str(&format!("{value_wrapper:?}"));
+            }
+            out.push('\n');
+            if let Ok(mut guard) = stdout_clone.lock() {
+                guard.push_str(&out);
+            }
+            Ok(())
+        })?;
+        lua.globals().set("print", print_fn)?;
+
+        if let Ok(io) = lua.globals().get::<mlua::Table>("io") {
+            let stdout_clone = stdout.clone();
+            let write_fn = lua.create_function(move |lua, args: Variadic<mlua::Value>| {
+                let mut out = String::new();
+                for v in args {
+                    let value_wrapper = Value::from_lua(v, lua)?;
+                    out.push_str(&format!("{value_wrapper:?}"));
+                }
+                if let Ok(mut guard) = stdout_clone.lock() {
+                    guard.push_str(&out);
+                }
+                Ok(())
+            })?;
+            let _ = io.set("write", write_fn);
+        }
+
+        // --- 2. Build the parameter table 'p' ---
+        let p_table = lua.create_table()?;
+        for (k, v) in data {
+            p_table.set(k.as_str(), Value(*v))?;
+        }
+
+        // Optional: Add the same __index fallback you have in your main `translate`
+        // method so missing keys automatically return Value(None)
+        let mt = lua.create_table()?;
+        mt.set(
+            "__index",
+            lua.create_function(|_, _: (Table, mlua::Value)| Ok(Value(None)))?,
+        )?;
+        p_table.set_metatable(Some(mt))?;
+
+        // --- 3. Evaluate script to get the wrapped Function ---
+        let func: mlua::Function = lua.load(lua_code).eval()?;
+
+        // --- 4. Call the function with our 'p' table to get the final Result Table ---
+        let result: mlua::Table = func.call(p_table)?;
+
+        // --- 5. Extract output data ---
+        let mut out = HashMap::new();
+        for pair in result.pairs::<String, mlua::Value>() {
+            let (k, v) = pair?;
+            let parsed_value = Value::from_lua(v, &lua)?;
+            out.insert(k, parsed_value.0);
+        }
+
+        let final_stdout = match stdout.lock() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+
+        Ok((out, final_stdout))
     }
 
     pub fn translate<K, I, O>(
